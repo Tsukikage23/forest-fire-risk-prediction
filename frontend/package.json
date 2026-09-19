@@ -11,20 +11,22 @@
   },
   "dependencies": {
     "axios": "^1.8.4",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.47.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-router-dom": "^7.5.0",
     "recharts": "^2.15.1"
   },
   "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
+    "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "jsdom": "^26.0.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
-    "vitest": "^3.0.9",
-    "vite": "^6.2.2"
+    "vite": "^6.2.2",
+    "vitest": "^3.0.9"
   }
 }

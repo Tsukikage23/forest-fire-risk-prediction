@@ -1,30 +1,41 @@
-import { PublishCommand, SNSClient } from "@aws-sdk/client-sns";
+/**
+ * FireGuard AI - Notification Service (Local Implementation)
+ * 
+ * NOTE FOR FUTURE AWS INTEGRATION:
+ * This local service can later be connected to AWS SNS by implementing
+ * the SNS publish command. For now, alerts are logged locally and
+ * stored in the LocalAlertRepository.
+ */
 
-export function createNotificationService({ region, topicArn, threshold }) {
-  const client = region && topicArn ? new SNSClient({ region }) : null;
-
+export function createNotificationService({ threshold = 65, alertRepository = null } = {}) {
   return {
-    isThresholdCrossed({ prediction, probability }) {
-      return Number(probability) >= threshold;
+    isThresholdCrossed({ probability }) {
+      return Number(probability) * 100 >= threshold;
     },
 
     async notifyRisk({ userEmail, prediction, probability, modelVersion }) {
-      if (!client || !topicArn) return { sent: false, reason: "SNS is not configured" };
+      const score = Math.round(Number(probability) * 100);
+      const isCritical = score >= 80;
+      const severity = isCritical ? 'CRITICAL' : 'WARNING';
 
-      const command = new PublishCommand({
-        TopicArn: topicArn,
-        Subject: "FireGuard model result",
-        Message: JSON.stringify({
-          message: "A FireGuard prediction crossed the configured notification threshold.",
-          userEmail,
-          prediction,
-          probability,
-          modelVersion,
-          disclaimer: "This is a software prototype result, not a certified emergency warning.",
-        }),
-      });
-      await client.send(command);
-      return { sent: true };
+      console.log(`[LocalNotificationService] Alert for ${userEmail || 'operator'}: Fire risk score=${score} (${severity})`);
+
+      if (alertRepository) {
+        await alertRepository.saveAlert({
+          severity,
+          title: `${severity}: Elevated Fire Risk Detected`,
+          message: `Fire risk probability reached ${(probability * 100).toFixed(1)}% (Model ${modelVersion || '2.0'})`,
+          score,
+          source: 'prediction_pipeline',
+          metadata: { userEmail, prediction, modelVersion },
+        });
+      }
+
+      return {
+        sent: true,
+        channel: 'local_console_and_repository',
+        note: 'Local notification generated without external cloud SNS dispatch.',
+      };
     },
   };
 }

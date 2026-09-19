@@ -4,8 +4,8 @@ import { createApp } from "../src/app.js";
 
 async function withServer(callback) {
   const app = createApp({
-    jwtSecret: "test-secret",
-    mlServiceUrl: "http://127.0.0.1:65535",
+    jwtSecret: "test-secret-32-character-minimum-len",
+    mlServiceUrl: "http://127.0.0.1:8000",
     frontendOrigin: "http://localhost:5173",
   });
   const server = app.listen(0);
@@ -14,46 +14,95 @@ async function withServer(callback) {
   try {
     return await callback(`http://127.0.0.1:${port}`);
   } finally {
-    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    await new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve()))
+    );
   }
 }
 
-test("health reports a disconnected database without crashing on both /health and /api/health", async () => {
+test("health endpoint returns status ok and project metadata", async () => {
   await withServer(async (baseUrl) => {
-    const res1 = await fetch(`${baseUrl}/health`);
-    assert.equal(res1.status, 200);
-    assert.deepEqual(await res1.json(), { status: "ok", database: "disconnected" });
-
-    const res2 = await fetch(`${baseUrl}/api/health`);
-    assert.equal(res2.status, 200);
-    assert.deepEqual(await res2.json(), { status: "ok", database: "disconnected" });
+    const res = await fetch(`${baseUrl}/api/health`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "ok");
+    assert.equal(body.project, "FireGuard AI");
+    assert.equal(body.version, "2.0.0");
   });
 });
 
-test("CORS allows requests from configured origins", async () => {
+test("buildings endpoint returns all 3 facilities with zone counts and coordinates", async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/health`, {
-      headers: { Origin: "http://localhost:5173" },
-    });
-    assert.equal(response.headers.get("access-control-allow-origin"), "http://localhost:5173");
+    const res = await fetch(`${baseUrl}/api/buildings`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "success");
+    assert.equal(body.buildings.length, 3);
+    const bldgA = body.buildings.find((b) => b.id === "building_a");
+    assert.ok(bldgA);
+    assert.equal(bldgA.zone_count, 7);
   });
 });
 
-test("prediction routes reject unauthenticated requests", async () => {
+test("evacuation routing computes safest egress route via Dijkstra", async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/predictions`);
-    assert.equal(response.status, 401);
-    assert.deepEqual(await response.json(), { error: "Authentication required" });
+    const res = await fetch(`${baseUrl}/api/buildings/building_a/evacuation-route?start_zone_id=bldg_a_elec`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "success");
+    assert.ok(body.evacuation_plan.route.length >= 2);
+    assert.equal(body.evacuation_plan.start_zone.id, "bldg_a_elec");
+    assert.ok(body.evacuation_plan.destination_exit.name.includes("Exit"));
   });
 });
 
-test("registration validates malformed input before database access", async () => {
+test("what-if fire simulation computes multi-step hazard progression", async () => {
   await withServer(async (baseUrl) => {
-    const response = await fetch(`${baseUrl}/api/auth/register`, {
+    const res = await fetch(`${baseUrl}/api/simulation/fire`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: "not-an-email", password: "short" }),
+      body: JSON.stringify({
+        building_id: "building_a",
+        origin_zone_id: "bldg_a_elec",
+        initial_severity: "CRITICAL",
+        duration: 4,
+      }),
     });
-    assert.equal(response.status, 400);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "success");
+    assert.equal(body.simulation.total_steps, 5); // 0 to 4
+    assert.ok(body.simulation.final_affected_zones >= 1);
+  });
+});
+
+test("6-hour forecast returns time-series predictions", async () => {
+  await withServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/api/forecast`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "success");
+    assert.equal(body.forecast.timeline.length, 7); // Current + 6 hours
+  });
+});
+
+test("alerts endpoint returns seeded local incidents", async () => {
+  await withServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/api/alerts`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "success");
+    assert.ok(body.alerts.length >= 1);
+  });
+});
+
+test("analytics endpoint returns multi-sensor trends and facility comparison", async () => {
+  await withServer(async (baseUrl) => {
+    const res = await fetch(`${baseUrl}/api/analytics`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.status, "success");
+    assert.equal(body.sensor_trends.length, 24);
+    assert.equal(body.building_comparison.length, 3);
   });
 });

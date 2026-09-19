@@ -1,7 +1,7 @@
 {
-  "name": "fireguard-backend",
+  "name": "fireguard-ai-backend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
@@ -9,9 +9,6 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.782.0",
-    "@aws-sdk/client-sns": "^3.782.0",
-    "@aws-sdk/s3-request-presigner": "^3.782.0",
     "axios": "^1.8.4",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
